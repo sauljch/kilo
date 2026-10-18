@@ -17,9 +17,8 @@ fn disable_raw_mode(fd: i32, termios: Termios) {
     tcsetattr(fd, TCSAFLUSH, &termios).expect("tcsetattr");
 }
 
-fn enable_raw_mode() {
-    let stdin_fd = io::stdin().as_raw_fd();
-    let mut raw = Termios::from_fd(stdin_fd).expect("Termios::from_fd");
+fn enable_raw_mode(fd: i32) {
+    let mut raw = Termios::from_fd(fd).expect("Termios::from_fd");
 
     raw.c_iflag &= !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
     raw.c_oflag &= !(OPOST);
@@ -28,7 +27,7 @@ fn enable_raw_mode() {
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 1;
 
-    tcsetattr(stdin_fd, TCSAFLUSH, &raw).expect("tcgetattr");
+    tcsetattr(fd, TCSAFLUSH, &raw).expect("tcgetattr");
 }
 
 /*** init ***/
@@ -37,7 +36,7 @@ fn main() {
     let orig_termios = Termios::from_fd(get_stdin_fd())
         .expect("Failed to get original termios struct from stdin.");
 
-    enable_raw_mode();
+    enable_raw_mode(get_stdin_fd());
 
     loop {
         let mut c = [b'\0'];
