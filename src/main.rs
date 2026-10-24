@@ -1,53 +1,41 @@
-use std::{
-    io::{self, Read},
-    os::fd::AsRawFd,
-};
+use libc::{self, STDIN_FILENO};
+use std::io::{self, Read};
 use termios::*;
 
-/*** data ***/
-
-#[inline(always)]
-fn get_stdin_fd() -> i32 {
-    io::stdin().as_raw_fd()
+struct RawMode {
+    orig_termios: Termios,
 }
 
-/*** terminal ***/
+impl RawMode {
+    fn enable_raw_mode() -> io::Result<()> {
+        let mut raw = Termios::from_fd(STDIN_FILENO)?;
 
-fn disable_raw_mode(fd: i32, termios: Termios) {
-    tcsetattr(fd, TCSAFLUSH, &termios).expect("tcsetattr");
+        raw.c_iflag &= !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+        raw.c_oflag &= !(OPOST);
+        raw.c_cflag |= CS8;
+        raw.c_lflag &= !(ECHO | ICANON | IEXTEN | ISIG);
+        raw.c_cc[VMIN] = 0;
+        raw.c_cc[VTIME] = 1;
+
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw)?;
+        Ok(())
+    }
 }
 
-fn enable_raw_mode(fd: i32) {
-    let mut raw = Termios::from_fd(fd).expect("Termios::from_fd");
-
-    raw.c_iflag &= !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-    raw.c_oflag &= !(OPOST);
-    raw.c_cflag |= CS8;
-    raw.c_lflag &= !(ECHO | ICANON | IEXTEN | ISIG);
-    raw.c_cc[VMIN] = 0;
-    raw.c_cc[VTIME] = 1;
-
-    tcsetattr(fd, TCSAFLUSH, &raw).expect("tcgetattr");
+impl Drop for RawMode {
+    fn drop(&mut self) {
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &self.orig_termios).expect("Failed to drop RawMode");
+    }
 }
-
-/*** init ***/
 
 fn main() {
-    let orig_termios = Termios::from_fd(get_stdin_fd())
-        .expect("Failed to get original termios struct from stdin.");
-
-    enable_raw_mode(get_stdin_fd());
+    let _raw = RawMode::enable_raw_mode();
 
     loop {
         let mut c = [b'\0'];
         match io::stdin().read(&mut c) {
             Ok(0) => continue, // timeout, no key presses
-            Ok(_) => (),
-            Err(e) => {
-                // TODO: set disable_raw_mode to be called within std::panic::set_hook().
-                disable_raw_mode(get_stdin_fd(), orig_termios);
-                panic!("{e}");
-            }
+            _ => (),
         }
 
         if c[0].is_ascii_control() {
@@ -60,8 +48,4 @@ fn main() {
             break;
         }
     }
-
-    // Rust does not have an exit function like C's atexit().
-    // This is the best I can do as of now. :(
-    disable_raw_mode(get_stdin_fd(), orig_termios);
 }
