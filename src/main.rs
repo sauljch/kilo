@@ -1,5 +1,5 @@
 use libc::{self, STDIN_FILENO};
-use std::io::{self, Read, Stdin};
+use std::io::{self, Read, Stdin, Stdout, Write};
 use termios::*;
 
 const fn ctrl_key(k: u8) -> u8 {
@@ -37,11 +37,22 @@ impl Drop for RawMode {
 
 fn editor_read_key(stdin: &mut Stdin) -> u8 {
     let mut key = [0; 1];
-    stdin
-        .read(&mut key)
-        .expect("editor_read_key(): Failed to read key");
+    loop {
+        let bytes_read = stdin.read(&mut key);
+        match bytes_read {
+            Ok(1) => break,
+            _ => continue,
+        }
+    }
 
     key[0]
+}
+
+fn editor_refresh_screen(stdout: &mut Stdout) -> io::Result<()> {
+    stdout.write(b"\x1b[2J")?;
+    stdout.write(b"\x1b[H")?;
+    stdout.flush()?;
+    Ok(())
 }
 
 fn editor_process_keypress(stdin: &mut Stdin) -> bool {
@@ -55,9 +66,10 @@ fn editor_process_keypress(stdin: &mut Stdin) -> bool {
 
 fn main() {
     let _raw = RawMode::enable_raw_mode().expect("main(): Failed to enable raw mode");
+    let mut stdout = io::stdout();
+    let _lock = stdout.lock();
     let mut stdin = io::stdin();
 
-    while editor_process_keypress(&mut stdin) {
-        continue;
-    }
+    editor_refresh_screen(&mut stdout).expect("main(): Failed to refresh screen");
+    while editor_process_keypress(&mut stdin) {}
 }
