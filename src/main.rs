@@ -1,6 +1,12 @@
 use libc::{self, STDIN_FILENO};
-use std::io::{self, Read};
+use std::io::{self, Read, Stdin};
 use termios::*;
+
+const fn ctrl_key(k: u8) -> u8 {
+    k & 0x1f
+}
+
+const QUIT: u8 = ctrl_key(b'c');
 
 struct RawMode {
     orig_termios: Termios,
@@ -29,24 +35,29 @@ impl Drop for RawMode {
     }
 }
 
+fn editor_read_key(stdin: &mut Stdin) -> u8 {
+    let mut key = [0; 1];
+    stdin
+        .read(&mut key)
+        .expect("editor_read_key(): Failed to read key");
+
+    key[0]
+}
+
+fn editor_process_keypress(stdin: &mut Stdin) -> bool {
+    let key = editor_read_key(stdin);
+
+    match key {
+        QUIT => false,
+        _ => true,
+    }
+}
+
 fn main() {
-    let _raw = RawMode::enable_raw_mode().expect("main(): Failed to enable raw mode.");
+    let _raw = RawMode::enable_raw_mode().expect("main(): Failed to enable raw mode");
+    let mut stdin = io::stdin();
 
-    loop {
-        let mut c = [b'\0'];
-        match io::stdin().read(&mut c) {
-            Ok(0) => continue, // timeout, no key presses
-            _ => (),
-        }
-
-        if c[0].is_ascii_control() {
-            print!("{:?}\r\n", c);
-        } else {
-            print!("{:?}\t('{}')\r\n", c, char::from(c[0]));
-        }
-
-        if c == [b'q'] {
-            break;
-        }
+    while editor_process_keypress(&mut stdin) {
+        continue;
     }
 }
