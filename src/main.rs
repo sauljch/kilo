@@ -7,8 +7,9 @@ struct RawMode {
 }
 
 impl RawMode {
-    fn enable_raw_mode() -> io::Result<()> {
+    fn enable_raw_mode() -> io::Result<Self> {
         let mut raw = Termios::from_fd(STDIN_FILENO)?;
+        let mode = Self { orig_termios: raw };
 
         raw.c_iflag &= !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
         raw.c_oflag &= !(OPOST);
@@ -18,7 +19,7 @@ impl RawMode {
         raw.c_cc[VTIME] = 1;
 
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw)?;
-        Ok(())
+        Ok(mode)
     }
 }
 
@@ -29,7 +30,7 @@ impl Drop for RawMode {
 }
 
 fn main() {
-    let _raw = RawMode::enable_raw_mode();
+    let _raw = RawMode::enable_raw_mode().expect("main(): Failed to enable raw mode.");
 
     loop {
         let mut c = [b'\0'];
