@@ -74,30 +74,37 @@ fn get_window_size() -> (u16, u16) {
     (ws.ws_row, ws.ws_col)
 }
 
-fn editor_draw_rows(rows: u16, stdout: &mut Stdout) -> io::Result<()> {
+fn editor_draw_rows(rows: u16, buffer: &mut String) -> io::Result<()> {
     for r in 0..rows {
-        stdout.write(b"~")?;
+        buffer.push_str("~");
 
+        buffer.push_str("\x1b[K");
         if r < rows - 1 {
-            stdout.write(b"\r\n")?;
+            buffer.push_str("\r\n");
         }
     }
-    stdout.flush()?;
     Ok(())
 }
 
-fn editor_clear_screen(stdout: &mut Stdout) -> io::Result<()> {
-    stdout.write(b"\x1b[2J")?;
-    stdout.write(b"\x1b[H")?;
-    stdout.flush()?;
+fn editor_clear_screen(buffer: &mut String) -> io::Result<()> {
+    buffer.push_str("\x1b[H"); // reposition cursor
     Ok(())
 }
 
 fn editor_refresh_screen(editor: &EditorConfig, stdout: &mut Stdout) -> io::Result<()> {
-    editor_clear_screen(stdout)?;
-    editor_draw_rows(editor.screen_rows, stdout)?;
-    stdout.write(b"\x1b[H")?;
+    let mut buffer = String::new();
+
+    buffer.push_str("\x1b[?25L"); // hide cursor
+    editor_clear_screen(&mut buffer)?;
+
+    editor_draw_rows(editor.screen_rows, &mut buffer)?;
+
+    buffer.push_str("\x1b[H"); // reposition cursor
+    buffer.push_str("\x1b[?25L"); // show cursor
+
+    stdout.write(buffer.as_bytes())?;
     stdout.flush()?;
+
     Ok(())
 }
 
