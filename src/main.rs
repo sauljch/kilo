@@ -5,6 +5,8 @@ use std::{
 };
 use termios::*;
 
+const WELCOME_MESSAGE: &str = "Kilo editor -- version 0.0.1";
+
 const fn ctrl_key(k: u8) -> u8 {
     k & 0x1f
 }
@@ -74,12 +76,27 @@ fn get_window_size() -> (u16, u16) {
     (ws.ws_row, ws.ws_col)
 }
 
-fn editor_draw_rows(rows: u16, buffer: &mut String) -> io::Result<()> {
-    for r in 0..rows {
-        buffer.push_str("~");
+fn editor_draw_rows(editor: EditorConfig, buffer: &mut String) -> io::Result<()> {
+    for r in 0..editor.screen_rows {
+        if r == editor.screen_rows / 3 && WELCOME_MESSAGE.len() < editor.screen_cols.into() {
+            // Print welcome message
+            let mut padding = (editor.screen_cols - WELCOME_MESSAGE.len() as u16) / 2;
+            if padding > 0 {
+                buffer.push_str("~");
+                padding -= 1;
+            }
+            while padding != 0 {
+                buffer.push_str(" ");
+                padding -= 1;
+            }
+
+            buffer.push_str(WELCOME_MESSAGE);
+        } else {
+            buffer.push_str("~");
+        }
 
         buffer.push_str("\x1b[K");
-        if r < rows - 1 {
+        if r < editor.screen_rows - 1 {
             buffer.push_str("\r\n");
         }
     }
@@ -91,13 +108,13 @@ fn editor_clear_screen(buffer: &mut String) -> io::Result<()> {
     Ok(())
 }
 
-fn editor_refresh_screen(editor: &EditorConfig, stdout: &mut Stdout) -> io::Result<()> {
+fn editor_refresh_screen(editor: EditorConfig, stdout: &mut Stdout) -> io::Result<()> {
     let mut buffer = String::new();
 
     buffer.push_str("\x1b[?25L"); // hide cursor
     editor_clear_screen(&mut buffer)?;
 
-    editor_draw_rows(editor.screen_rows, &mut buffer)?;
+    editor_draw_rows(editor, &mut buffer)?;
 
     buffer.push_str("\x1b[H"); // reposition cursor
     buffer.push_str("\x1b[?25L"); // show cursor
@@ -124,6 +141,6 @@ fn main() {
     let _lock = stdout.lock();
     let mut stdin = io::stdin();
 
-    editor_refresh_screen(&editor, &mut stdout).expect("main(): Failed to refresh screen");
+    editor_refresh_screen(editor, &mut stdout).expect("main(): Failed to refresh screen");
     while editor_process_keypress(&mut stdin) {}
 }
