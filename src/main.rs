@@ -41,6 +41,9 @@ impl Drop for RawMode {
 }
 
 struct EditorConfig {
+    stdin: Stdin,
+    stdout: Stdout,
+    buffer: String,
     screen_rows: u16,
     screen_cols: u16,
 }
@@ -50,23 +53,76 @@ impl EditorConfig {
         let (rows, cols) = get_window_size();
 
         EditorConfig {
+            stdin: io::stdin(),
+            stdout: io::stdout(),
+            buffer: String::new(),
             screen_rows: rows,
             screen_cols: cols,
         }
     }
-}
 
-fn editor_read_key(stdin: &mut Stdin) -> u8 {
-    let mut key = [0; 1];
-    loop {
-        let bytes_read = stdin.read(&mut key);
-        match bytes_read {
-            Ok(1) => break,
-            _ => continue,
+    fn read_key(&mut self) -> u8 {
+        let mut key = [0; 1];
+        loop {
+            let bytes_read = self.stdin.read(&mut key);
+            match bytes_read {
+                Ok(1) => break,
+                _ => continue,
+            }
+        }
+
+        key[0]
+    }
+
+    fn process_keypress(&mut self) -> bool {
+        let key = self.read_key();
+
+        match key {
+            QUIT => false,
+            _ => true,
         }
     }
 
-    key[0]
+    fn draw_rows(&mut self) {
+        for r in 0..self.screen_rows {
+            if r == self.screen_rows / 3 && WELCOME_MESSAGE.len() < self.screen_cols.into() {
+                // Print welcome message
+                let mut padding = (self.screen_cols - WELCOME_MESSAGE.len() as u16) / 2;
+                if padding > 0 {
+                    self.buffer.push_str("~");
+                    padding -= 1;
+                }
+                while padding != 0 {
+                    self.buffer.push_str(" ");
+                    padding -= 1;
+                }
+
+                self.buffer.push_str(WELCOME_MESSAGE);
+            } else {
+                self.buffer.push_str("~");
+            }
+
+            self.buffer.push_str("\x1b[K");
+            if r < self.screen_rows - 1 {
+                self.buffer.push_str("\r\n");
+            }
+        }
+    }
+
+    fn refresh_screen(&mut self) -> io::Result<()> {
+        self.buffer.push_str("\x1b[?25L"); // hide cursor
+        self.buffer.push_str("\x1b[H"); // reposition cursor
+
+        self.draw_rows();
+
+        self.buffer.push_str("\x1b[H"); // reposition cursor
+        self.buffer.push_str("\x1b[?25L"); // show cursor
+
+        self.stdout.write(self.buffer.as_bytes())?;
+        self.stdout.flush()?;
+
+        Ok(())
+    }
 }
 
 fn get_window_size() -> (u16, u16) {
@@ -76,71 +132,12 @@ fn get_window_size() -> (u16, u16) {
     (ws.ws_row, ws.ws_col)
 }
 
-fn editor_draw_rows(editor: EditorConfig, buffer: &mut String) -> io::Result<()> {
-    for r in 0..editor.screen_rows {
-        if r == editor.screen_rows / 3 && WELCOME_MESSAGE.len() < editor.screen_cols.into() {
-            // Print welcome message
-            let mut padding = (editor.screen_cols - WELCOME_MESSAGE.len() as u16) / 2;
-            if padding > 0 {
-                buffer.push_str("~");
-                padding -= 1;
-            }
-            while padding != 0 {
-                buffer.push_str(" ");
-                padding -= 1;
-            }
-
-            buffer.push_str(WELCOME_MESSAGE);
-        } else {
-            buffer.push_str("~");
-        }
-
-        buffer.push_str("\x1b[K");
-        if r < editor.screen_rows - 1 {
-            buffer.push_str("\r\n");
-        }
-    }
-    Ok(())
-}
-
-fn editor_clear_screen(buffer: &mut String) -> io::Result<()> {
-    buffer.push_str("\x1b[H"); // reposition cursor
-    Ok(())
-}
-
-fn editor_refresh_screen(editor: EditorConfig, stdout: &mut Stdout) -> io::Result<()> {
-    let mut buffer = String::new();
-
-    buffer.push_str("\x1b[?25L"); // hide cursor
-    editor_clear_screen(&mut buffer)?;
-
-    editor_draw_rows(editor, &mut buffer)?;
-
-    buffer.push_str("\x1b[H"); // reposition cursor
-    buffer.push_str("\x1b[?25L"); // show cursor
-
-    stdout.write(buffer.as_bytes())?;
-    stdout.flush()?;
-
-    Ok(())
-}
-
-fn editor_process_keypress(stdin: &mut Stdin) -> bool {
-    let key = editor_read_key(stdin);
-
-    match key {
-        QUIT => false,
-        _ => true,
-    }
-}
-
 fn main() {
     let _raw = RawMode::enable_raw_mode().expect("main(): Failed to enable raw mode");
-    let editor = EditorConfig::new();
-    let mut stdout = io::stdout();
-    let _lock = stdout.lock();
-    let mut stdin = io::stdin();
+    let mut editor = EditorConfig::new();
 
-    editor_refresh_screen(editor, &mut stdout).expect("main(): Failed to refresh screen");
-    while editor_process_keypress(&mut stdin) {}
+    editor
+        .refresh_screen()
+        .expect("main(): Failed to refresh screen");
+    while editor.process_keypress() {}
 }
