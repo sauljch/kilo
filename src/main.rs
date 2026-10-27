@@ -44,6 +44,13 @@ impl Drop for RawMode {
     }
 }
 
+fn get_window_size() -> (u16, u16) {
+    let mut ws: winsize = unsafe { mem::zeroed() };
+    unsafe { ioctl(STDOUT_FILENO, TIOCGWINSZ, &mut ws) };
+
+    (ws.ws_row, ws.ws_col)
+}
+
 struct EditorConfig {
     stdin: Stdin,
     stdout: Stdout,
@@ -95,10 +102,26 @@ impl EditorConfig {
 
     fn move_cursor(&mut self, key: i32) {
         match key {
-            UP => self.cursor_y -= 1,
-            LEFT => self.cursor_x -= 1,
-            DOWN => self.cursor_y += 1,
-            RIGHT => self.cursor_x += 1,
+            UP => {
+                if self.cursor_y > 0 {
+                    self.cursor_y -= 1;
+                }
+            }
+            LEFT => {
+                if self.cursor_x > 0 {
+                    self.cursor_x -= 1;
+                }
+            }
+            DOWN => {
+                if self.cursor_y != self.screen_rows - 1 {
+                    self.cursor_y += 1;
+                }
+            }
+            RIGHT => {
+                if self.cursor_x != self.screen_cols - 1 {
+                    self.cursor_x += 1;
+                }
+            }
             _ => (),
         }
     }
@@ -168,13 +191,6 @@ impl EditorConfig {
 
         Ok(())
     }
-}
-
-fn get_window_size() -> (u16, u16) {
-    let mut ws: winsize = unsafe { mem::zeroed() };
-    unsafe { ioctl(STDOUT_FILENO, TIOCGWINSZ, &mut ws) };
-
-    (ws.ws_row, ws.ws_col)
 }
 
 fn main() {
