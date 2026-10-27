@@ -7,11 +7,15 @@ use termios::*;
 
 const WELCOME_MESSAGE: &str = "Kilo editor -- version 0.0.1";
 
-const fn ctrl_key(k: u8) -> u8 {
-    k & 0x1f
+const fn ctrl_key(k: u8) -> i32 {
+    (k & 0x1f) as i32
 }
 
-const QUIT: u8 = ctrl_key(b'c');
+const QUIT: i32 = ctrl_key(b'c');
+const UP: i32 = (b'w' as i32) + 1000;
+const LEFT: i32 = (b'a' as i32) + 1000;
+const DOWN: i32 = (b's' as i32) + 1000;
+const RIGHT: i32 = (b'd' as i32) + 1000;
 
 struct RawMode {
     orig_termios: Termios,
@@ -65,25 +69,36 @@ impl EditorConfig {
         }
     }
 
-    fn read_key(&mut self) -> u8 {
+    fn read_key(&mut self) -> i32 {
         let mut key = [0; 1];
         loop {
-            let bytes_read = self.stdin.read(&mut key);
-            match bytes_read {
-                Ok(1) => break,
-                _ => continue,
-            }
-        }
+            let _ = self.stdin.read(&mut key);
 
-        key[0]
+            if key[0] == b'\x1b' {
+                let mut sequence = [0; 3];
+                let _ = self.stdin.read(&mut sequence);
+
+                if sequence[0] == b'[' {
+                    match sequence[1] {
+                        b'A' => return UP,    // up arrow
+                        b'B' => return DOWN,  // down arrow
+                        b'C' => return RIGHT, // right arrow
+                        b'D' => return LEFT,  // left arrow
+                        _ => (),
+                    }
+                }
+            }
+
+            return key[0] as i32;
+        }
     }
 
-    fn move_cursor(&mut self, key: u8) {
+    fn move_cursor(&mut self, key: i32) {
         match key {
-            b'w' => self.cursor_y -= 1,
-            b'a' => self.cursor_x -= 1,
-            b's' => self.cursor_y += 1,
-            b'd' => self.cursor_x += 1,
+            UP => self.cursor_y -= 1,
+            LEFT => self.cursor_x -= 1,
+            DOWN => self.cursor_y += 1,
+            RIGHT => self.cursor_x += 1,
             _ => (),
         }
     }
@@ -93,7 +108,7 @@ impl EditorConfig {
 
         match key {
             QUIT => false,
-            b'w' | b'a' | b's' | b'd' => {
+            UP | LEFT | DOWN | RIGHT => {
                 self.move_cursor(key);
                 true
             }
