@@ -44,6 +44,8 @@ struct EditorConfig {
     stdin: Stdin,
     stdout: Stdout,
     buffer: String,
+    cursor_x: u16,
+    cursor_y: u16,
     screen_rows: u16,
     screen_cols: u16,
 }
@@ -56,6 +58,8 @@ impl EditorConfig {
             stdin: io::stdin(),
             stdout: io::stdout(),
             buffer: String::new(),
+            cursor_x: 0,
+            cursor_y: 0,
             screen_rows: rows,
             screen_cols: cols,
         }
@@ -74,11 +78,25 @@ impl EditorConfig {
         key[0]
     }
 
+    fn move_cursor(&mut self, key: u8) {
+        match key {
+            b'w' => self.cursor_y -= 1,
+            b'a' => self.cursor_x -= 1,
+            b's' => self.cursor_y += 1,
+            b'd' => self.cursor_x += 1,
+            _ => (),
+        }
+    }
+
     fn process_keypress(&mut self) -> bool {
         let key = self.read_key();
 
         match key {
             QUIT => false,
+            b'w' | b'a' | b's' | b'd' => {
+                self.move_cursor(key);
+                true
+            }
             _ => true,
         }
     }
@@ -110,13 +128,15 @@ impl EditorConfig {
     }
 
     fn refresh_screen(&mut self) -> io::Result<()> {
-        self.buffer.push_str("\x1b[?25L"); // hide cursor
+        self.buffer.push_str("\x1b[?25l"); // hide cursor
         self.buffer.push_str("\x1b[H"); // reposition cursor
 
         self.draw_rows();
 
-        self.buffer.push_str("\x1b[H"); // reposition cursor
-        self.buffer.push_str("\x1b[?25L"); // show cursor
+        let cursor_pos = format!("\x1b[{};{}H", self.cursor_y + 1, self.cursor_x + 1);
+        self.buffer.push_str(&cursor_pos);
+
+        self.buffer.push_str("\x1b[?25h"); // show cursor
 
         self.stdout.write(self.buffer.as_bytes())?;
         self.stdout.flush()?;
@@ -139,5 +159,9 @@ fn main() {
     editor
         .refresh_screen()
         .expect("main(): Failed to refresh screen");
-    while editor.process_keypress() {}
+    while editor.process_keypress() {
+        editor
+            .refresh_screen()
+            .expect("main(): Failed to refresh screen");
+    }
 }
