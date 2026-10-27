@@ -158,6 +158,16 @@ impl EditorConfig {
 
         Ok(())
     }
+
+    fn clear_screen(&mut self) -> io::Result<()> {
+        self.buffer.push_str("\x1b[2J");
+        self.buffer.push_str("\x1b[H");
+
+        self.stdout.write(self.buffer.as_bytes())?;
+        self.stdout.flush()?;
+
+        Ok(())
+    }
 }
 
 fn get_window_size() -> (u16, u16) {
@@ -179,4 +189,7 @@ fn main() {
             .refresh_screen()
             .expect("main(): Failed to refresh screen");
     }
+    editor
+        .clear_screen()
+        .expect("main(): Failed to clean screen at exit");
 }
