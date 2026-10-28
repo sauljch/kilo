@@ -19,6 +19,11 @@ impl Key {
     const LEFT: i32 = 1001;
     const DOWN: i32 = 1002;
     const RIGHT: i32 = 1003;
+    const DELETE: i32 = 1004;
+    const HOME: i32 = 1005;
+    const END: i32 = 1006;
+    const PAGE_UP: i32 = 1007;
+    const PAGE_DOWN: i32 = 1008;
 }
 
 fn get_window_size() -> (u16, u16) {
@@ -98,11 +103,36 @@ impl EditorConfig {
                 let _ = self.stdin.read(&mut sequence);
 
                 if sequence[0] == b'[' {
+                    if sequence[1] >= b'0' && sequence[1] <= b'9' {
+                        if sequence[2] == b'~' {
+                            match sequence[1] {
+                                b'1' => return Key::HOME,
+                                b'3' => return Key::DELETE,
+                                b'4' => return Key::END,
+                                b'5' => return Key::PAGE_UP,
+                                b'6' => return Key::PAGE_DOWN,
+                                b'7' => return Key::HOME,
+                                b'8' => return Key::END,
+                                _ => (),
+                            }
+                        }
+
+                        return b'\x1b' as i32;
+                    } else {
+                        match sequence[1] {
+                            b'A' => return Key::UP,
+                            b'B' => return Key::DOWN,
+                            b'C' => return Key::RIGHT,
+                            b'D' => return Key::LEFT,
+                            b'H' => return Key::HOME,
+                            b'F' => return Key::END,
+                            _ => (),
+                        }
+                    }
+                } else if sequence[0] == b'O' {
                     match sequence[1] {
-                        b'A' => return Key::UP,    // up arrow
-                        b'B' => return Key::DOWN,  // down arrow
-                        b'C' => return Key::RIGHT, // right arrow
-                        b'D' => return Key::LEFT,  // left arrow
+                        b'H' => return Key::HOME,
+                        b'F' => return Key::END,
                         _ => (),
                     }
                 }
@@ -142,13 +172,28 @@ impl EditorConfig {
         let key = self.read_key();
 
         match key {
-            CTRL_C => false,
+            CTRL_C => return false,
             Key::UP | Key::LEFT | Key::DOWN | Key::RIGHT => {
                 self.move_cursor(key);
-                true
             }
-            _ => true,
+            Key::PAGE_UP | Key::PAGE_DOWN => {
+                for _ in 0..self.screen_rows {
+                    self.move_cursor(if key == Key::PAGE_UP {
+                        Key::UP
+                    } else {
+                        Key::DOWN
+                    });
+                }
+            }
+            Key::HOME => {
+                self.cursor_x = 0;
+            }
+            Key::END => {
+                self.cursor_x = self.screen_cols - 1;
+            }
+            _ => (),
         }
+        true
     }
 
     fn draw_rows(&mut self) {
