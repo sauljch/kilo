@@ -168,11 +168,10 @@ impl EditorConfig {
         }
     }
 
-    fn process_keypress(&mut self) -> bool {
+    fn process_keypress(&mut self) -> i32 {
         let key = self.read_key();
 
         match key {
-            CTRL_C => return false,
             Key::UP | Key::LEFT | Key::DOWN | Key::RIGHT => {
                 self.move_cursor(key);
             }
@@ -193,7 +192,8 @@ impl EditorConfig {
             }
             _ => (),
         }
-        true
+
+        key
     }
 
     fn draw_rows(&mut self) {
@@ -253,7 +253,7 @@ impl EditorConfig {
 fn main() {
     let mut editor = EditorConfig::new();
 
-    while editor.process_keypress() {
+    while editor.process_keypress() != CTRL_C {
         editor
             .refresh_screen()
             .expect("main(): Failed to refresh screen");
