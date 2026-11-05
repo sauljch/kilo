@@ -1,6 +1,8 @@
 use libc::{self, STDIN_FILENO, STDOUT_FILENO, TIOCGWINSZ, ioctl, winsize};
+use std::fs::File;
 use std::{
-    io::{self, Read, Stdin, Stdout, Write},
+    env,
+    io::{self, BufRead, BufReader, Read, Stdin, Stdout, Write},
     mem,
 };
 use termios::*;
@@ -24,6 +26,11 @@ impl Key {
     const END: i32 = 1006;
     const PAGE_UP: i32 = 1007;
     const PAGE_DOWN: i32 = 1008;
+}
+
+struct Row {
+    size: usize,
+    content: String,
 }
 
 fn get_window_size() -> (u16, u16) {
@@ -57,6 +64,8 @@ struct EditorConfig {
     cursor_y: u16,
     screen_rows: u16,
     screen_cols: u16,
+    row_count: u16,
+    row: Vec<Row>, // current row?
 }
 
 impl Drop for EditorConfig {
@@ -83,6 +92,8 @@ impl EditorConfig {
             cursor_y: 0,
             screen_rows: rows,
             screen_cols: cols,
+            row_count: 0,
+            row: Vec::with_capacity(0),
         };
 
         config.buffer.push_str("\x1b[?1049h"); // enter alternate screen
@@ -196,23 +207,33 @@ impl EditorConfig {
         key
     }
 
+    fn should_draw_welcome_message(&mut self, curr_row: u16) -> bool {
+        self.row_count == 0
+            && curr_row == self.screen_rows / 3
+            && WELCOME_MESSAGE.len() < self.screen_cols.into()
+    }
+
     fn draw_rows(&mut self) {
         for r in 0..self.screen_rows {
-            if r == self.screen_rows / 3 && WELCOME_MESSAGE.len() < self.screen_cols.into() {
-                // Print welcome message
-                let mut padding = (self.screen_cols - WELCOME_MESSAGE.len() as u16) / 2;
-                if padding > 0 {
-                    self.buffer.push_str("~");
-                    padding -= 1;
-                }
-                while padding != 0 {
-                    self.buffer.push_str(" ");
-                    padding -= 1;
-                }
+            if r >= self.row_count {
+                if self.should_draw_welcome_message(r) {
+                    // Print welcome message
+                    let mut padding = (self.screen_cols - WELCOME_MESSAGE.len() as u16) / 2;
+                    if padding > 0 {
+                        self.buffer.push_str("~");
+                        padding -= 1;
+                    }
+                    while padding != 0 {
+                        self.buffer.push_str(" ");
+                        padding -= 1;
+                    }
 
-                self.buffer.push_str(WELCOME_MESSAGE);
+                    self.buffer.push_str(WELCOME_MESSAGE);
+                } else {
+                    self.buffer.push_str("~");
+                }
             } else {
-                self.buffer.push_str("~");
+                self.buffer.push_str(&self.row[r as usize].content);
             }
 
             self.buffer.push_str("\x1b[K");
@@ -248,10 +269,43 @@ impl EditorConfig {
 
         Ok(())
     }
+
+    fn append_row(&mut self, row_content: String) {
+        if row_content.len() > self.screen_cols as usize {
+            // trim row_content to fit screen_cols
+            self.row.push(Row {
+                size: self.screen_cols as usize,
+                content: row_content[..self.screen_cols as usize].to_string(),
+            });
+        } else {
+            self.row.push(Row {
+                size: row_content.len(),
+                content: row_content,
+            });
+        }
+
+        self.row_count += 1;
+    }
+
+    fn open(&mut self, filename: &String) {
+        let file = File::open(filename).expect("EditorConfig::open(): Failed to open {filename}");
+        let reader = BufReader::new(file);
+
+        for line in reader.lines() {
+            self.append_row(line.expect("EditorConfig::open(): Failed to read line in {filename}"));
+        }
+
+        self.refresh_screen()
+            .expect("EditorConfig::open(): Failed to refresh screen");
+    }
 }
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
     let mut editor = EditorConfig::new();
+    if args.len() >= 2 {
+        editor.open(&args[1]);
+    }
 
     while editor.process_keypress() != CTRL_C {
         editor
