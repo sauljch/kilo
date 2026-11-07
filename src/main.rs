@@ -62,10 +62,11 @@ struct EditorConfig {
     buffer: String,
     cursor_x: u16,
     cursor_y: u16,
+    row_offset: u16, // keeps track of user's current row
     screen_rows: u16,
     screen_cols: u16,
     row_count: u16,
-    row: Vec<Row>, // current row?
+    row: Vec<Row>,
 }
 
 impl Drop for EditorConfig {
@@ -90,6 +91,7 @@ impl EditorConfig {
             buffer: String::new(),
             cursor_x: 0,
             cursor_y: 0,
+            row_offset: 0,
             screen_rows: rows,
             screen_cols: cols,
             row_count: 0,
@@ -166,7 +168,7 @@ impl EditorConfig {
                 }
             }
             Key::DOWN => {
-                if self.cursor_y != self.screen_rows - 1 {
+                if self.cursor_y < self.row_count {
                     self.cursor_y += 1;
                 }
             }
@@ -213,9 +215,19 @@ impl EditorConfig {
             && WELCOME_MESSAGE.len() < self.screen_cols.into()
     }
 
+    fn scroll(&mut self) {
+        if self.cursor_y < self.row_offset {
+            self.row_offset = self.cursor_y;
+        }
+        if self.cursor_y >= self.row_offset + self.screen_rows {
+            self.row_offset = self.cursor_y - self.screen_rows + 1;
+        }
+    }
+
     fn draw_rows(&mut self) {
         for r in 0..self.screen_rows {
-            if r >= self.row_count {
+            let file_row = r + self.row_offset;
+            if file_row >= self.row_count {
                 if self.should_draw_welcome_message(r) {
                     // Print welcome message
                     let mut padding = (self.screen_cols - WELCOME_MESSAGE.len() as u16) / 2;
@@ -233,7 +245,7 @@ impl EditorConfig {
                     self.buffer.push_str("~");
                 }
             } else {
-                self.buffer.push_str(&self.row[r as usize].content);
+                self.buffer.push_str(&self.row[file_row as usize].content);
             }
 
             self.buffer.push_str("\x1b[K");
@@ -244,12 +256,18 @@ impl EditorConfig {
     }
 
     fn refresh_screen(&mut self) -> io::Result<()> {
+        self.scroll();
+
         self.buffer.push_str("\x1b[?25l"); // hide cursor
         self.buffer.push_str("\x1b[H"); // reposition cursor
 
         self.draw_rows();
 
-        let cursor_pos = format!("\x1b[{};{}H", self.cursor_y + 1, self.cursor_x + 1);
+        let cursor_pos = format!(
+            "\x1b[{};{}H",
+            (self.cursor_y - self.row_offset) + 1,
+            self.cursor_x + 1
+        );
         self.buffer.push_str(&cursor_pos);
 
         self.buffer.push_str("\x1b[?25h"); // show cursor
