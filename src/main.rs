@@ -63,6 +63,7 @@ struct EditorConfig {
     cursor_x: u16,
     cursor_y: u16,
     row_offset: u16, // keeps track of user's current row
+    col_offset: u16, // keeps track of user's current column
     screen_rows: u16,
     screen_cols: u16,
     row_count: u16,
@@ -92,6 +93,7 @@ impl EditorConfig {
             cursor_x: 0,
             cursor_y: 0,
             row_offset: 0,
+            col_offset: 0,
             screen_rows: rows,
             screen_cols: cols,
             row_count: 0,
@@ -173,9 +175,7 @@ impl EditorConfig {
                 }
             }
             Key::RIGHT => {
-                if self.cursor_x != self.screen_cols - 1 {
-                    self.cursor_x += 1;
-                }
+                self.cursor_x += 1;
             }
             _ => (),
         }
@@ -222,6 +222,12 @@ impl EditorConfig {
         if self.cursor_y >= self.row_offset + self.screen_rows {
             self.row_offset = self.cursor_y - self.screen_rows + 1;
         }
+        if self.cursor_x < self.col_offset {
+            self.col_offset = self.cursor_x;
+        }
+        if self.cursor_x >= self.col_offset + self.screen_cols {
+            self.col_offset = self.cursor_x - self.screen_cols + 1;
+        }
     }
 
     fn draw_rows(&mut self) {
@@ -245,7 +251,13 @@ impl EditorConfig {
                     self.buffer.push_str("~");
                 }
             } else {
-                self.buffer.push_str(&self.row[file_row as usize].content);
+                let mut len: i32 =
+                    (self.row[file_row as usize].size as i32) - self.col_offset as i32;
+                if len < 0 {
+                    len = 0
+                };
+                self.buffer
+                    .push_str(&self.row[file_row as usize].content[0..len as usize]);
             }
 
             self.buffer.push_str("\x1b[K");
@@ -266,7 +278,7 @@ impl EditorConfig {
         let cursor_pos = format!(
             "\x1b[{};{}H",
             (self.cursor_y - self.row_offset) + 1,
-            self.cursor_x + 1
+            (self.cursor_x - self.col_offset) + 1
         );
         self.buffer.push_str(&cursor_pos);
 
