@@ -274,6 +274,7 @@ impl EditorConfig {
 
         self.stdout.write(self.buffer.as_bytes())?;
         self.stdout.flush()?;
+        self.buffer.clear();
 
         Ok(())
     }
@@ -284,6 +285,7 @@ impl EditorConfig {
 
         self.stdout.write(self.buffer.as_bytes())?;
         self.stdout.flush()?;
+        self.buffer.clear();
 
         Ok(())
     }
