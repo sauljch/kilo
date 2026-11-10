@@ -28,6 +28,7 @@ impl Key {
     const PAGE_DOWN: i32 = 1008;
 }
 
+#[derive(Clone)]
 struct Row {
     size: usize,
     content: String,
@@ -158,6 +159,12 @@ impl EditorConfig {
     }
 
     fn move_cursor(&mut self, key: i32) {
+        let row: Option<Row> = if self.cursor_y >= self.row_count {
+            None
+        } else {
+            Some(self.row[self.cursor_y as usize].clone())
+        };
+
         match key {
             Key::UP => {
                 if self.cursor_y > 0 {
@@ -175,9 +182,21 @@ impl EditorConfig {
                 }
             }
             Key::RIGHT => {
-                self.cursor_x += 1;
+                if row.is_some() && self.cursor_x < row.unwrap().size as u16 {
+                    self.cursor_x += 1;
+                }
             }
             _ => (),
+        }
+
+        let row = if self.cursor_y >= self.row_count {
+            None
+        } else {
+            Some(self.row[self.cursor_y as usize].clone())
+        };
+        let row_len = if row.is_some() { row.unwrap().size } else { 0 };
+        if self.cursor_x > row_len as u16 {
+            self.cursor_x = row_len as u16;
         }
     }
 
