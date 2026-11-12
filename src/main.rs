@@ -174,6 +174,10 @@ impl EditorConfig {
             Key::LEFT => {
                 if self.cursor_x > 0 {
                     self.cursor_x -= 1;
+                } else if self.cursor_y > 0 {
+                    // snap to end of previous line if in column 0 and not in row 0
+                    self.cursor_y -= 1;
+                    self.cursor_x = self.row[self.cursor_y as usize].size as u16;
                 }
             }
             Key::DOWN => {
@@ -182,8 +186,12 @@ impl EditorConfig {
                 }
             }
             Key::RIGHT => {
-                if row.is_some() && self.cursor_x < row.unwrap().size as u16 {
+                if row.is_some() && self.cursor_x < row.as_ref().unwrap().size as u16 {
                     self.cursor_x += 1;
+                } else if row.is_some() && self.cursor_x == row.as_ref().unwrap().size as u16 {
+                    // snap to start of next line if at the end of a linE
+                    self.cursor_y += 1;
+                    self.cursor_x = 0;
                 }
             }
             _ => (),
